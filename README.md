@@ -1,21 +1,32 @@
-# PROJECT NOT UNDER ACTIVE MANAGEMENT #  
-This project will no longer be maintained by Intel.  
-Intel has ceased development and contributions including, but not limited to, maintenance, bug fixes, new releases, or updates, to this project.  
-Intel no longer accepts patches to this project.  
- If you have an ongoing need to use this project, are interested in independently developing it, or would like to maintain patches for the open source software community, please create your own fork of this project.  
-  
 ## libXCam
 
-Copyright (C) 2014-2023 Intel Corporation
+Copyright (C) 2014-2026 Intel Corporation
 
 libxcam core source code under the terms of Apache License, Version 2.0
 
+> **Maintenance Notice**: Intel ceased upstream development in 2023. This fork is
+> actively maintained by **Dong Yang \<dong.yang@intel.com\>** with a focus on
+> porting libXCam to **robotics platforms** — including multi-camera surround-view
+> perception, edge DNN inference, and integration with ROS 2 / OpenVINO pipelines.
+> Contributions and bug reports are welcome via the issues page of this fork.
+
 #### Description:
-libXCam is a project for extended camera features and focus on image
-quality improvement and video analysis. There are lots features supported
-in image pre-processing, image post-processing and smart analysis. This
-library makes GPU/CPU/ISP working together to improve image quality.
-OpenCL is used to improve performance in different platforms.
+libXCam is a library for extended camera features focused on image quality
+improvement and video analysis. It supports image pre-processing,
+image post-processing, and smart analysis, enabling GPU/CPU/ISP to work
+together efficiently. Originally designed for automotive surround-view (AVM),
+it is being extended for **robotic perception** use cases including
+360-degree environmental awareness, obstacle detection, and real-time
+multi-camera fusion on Intel edge platforms.
+
+#### Robotics Porting Goals (2026+):
+  * Multi-camera surround-view for mobile robots (ground / aerial)
+  * Fisheye-to-equirectangular reprojection for SLAM preprocessing
+  * Integration with ROS 2 (`sensor_msgs/Image` bridge)
+  * OpenVINO 2024+ DNN inference (object detection, depth estimation)
+  * Modernized C++ codebase (C++17, `std::shared_ptr`, `std::thread`)
+  * CMake build system migration
+  * Vulkan 1.3 compute backend for edge GPU acceleration
 
 #### Features:
   * Image processing features
@@ -33,8 +44,11 @@ OpenCL is used to improve performance in different platforms.
          - Quality and performance improved (OpenCL/CPU/GLES).
          - CPU version upstreamed into AOSP for automotive surround view.
          - Enable Vulkan to improve performance.
-      - DNN inference framework
+      - DNN inference framework (OpenVINO 2023.0+)
         - Support pedestrian and vehicle detection.
+        - Support semantic segmentation and super-resolution.
+        - *(Roadmap)* Support depth estimation models (MiDaS, DepthAnything)
+        - *(Roadmap)* Support 3D object detection for robotics navigation
       - Digital Video Stabilization
         - OpenCV feature-matched based video stabilization.
         - gyroscope 3-DoF (orientation) based video stabilization.
@@ -65,19 +79,19 @@ OpenCL is used to improve performance in different platforms.
        - xcamfilter, improve image quality by advanced features and smart analysis.
 
 #### Prerequisite:
-  * install gcc/g++, automake, autoconf, libtool, gawk, pkg-config
-  * Linux kernel > 3.10
-  * install ocl-icd-dev, ocl-icd-opencl-dev
-  * If --enable-gst, need install libgstreamer1.0-dev, libgstreamer-plugins-base1.0-dev
+  * Compiler: gcc/g++ >= 7.0 with C++17 support; automake, autoconf, libtool, gawk, pkg-config
+  * Linux kernel >= 4.15 (5.x recommended for DMA-BUF and V4L2 improvements)
+  * install ocl-icd-dev, ocl-icd-opencl-dev (OpenCL 2.0+)
+  * If --enable-gst, need install libgstreamer1.0-dev >= 1.18, libgstreamer-plugins-base1.0-dev
   * If --enable-aiq, need get ia_imaging lib which we don't support
-  * If --enable-libcl, need compile or install [OpenCL](https://github.com/intel/compute-runtime) driver
-  * If --enable-opencv, suggest [OpenCV](http://opencv.org) versions [3.0.0 - 4.0.0) (or: [OpenCV Wiki](https://github.com/opencv/opencv/wiki))
+  * If --enable-libcl, need compile or install [OpenCL](https://github.com/intel/compute-runtime) driver (NEO recommended)
+  * If --enable-opencv, requires [OpenCV](http://opencv.org) >= 4.0 (4.x recommended; [OpenCV Wiki](https://github.com/opencv/opencv/wiki))
   * If --enable-render, need compile [OpenSceneGraph](https://github.com/openscenegraph/OpenSceneGraph) library with configure option "-DOSG_WINDOWING_SYSTEM=X11"
-  * If --enable-gles, need to install [Mesa3D](https://www.mesa3d.org) library
-  * If --enable-vulkan, need to install [Mesa3D](https://www.mesa3d.org) library
-  * If --enable-avx512, need to install [GCC version > 4.9](https://gcc.gnu.org/gcc-4.9/changes.html) ([ CPUs With AVX-512 required](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#CPUs_with_AVX-512))
-  * If --enable-dnn, need to compile [OpenVino](https://github.com/openvinotoolkit/openvino)
-  * If --enable-json, need to install [json.hpp](https://github.com/nlohmann/json/releases/download/v3.7.3/json.hpp)
+  * If --enable-gles, need to install [Mesa3D](https://www.mesa3d.org) library >= 21.0
+  * If --enable-vulkan, need to install [Vulkan SDK](https://www.lunarg.com/vulkan-sdk/) >= 1.3 or [Mesa3D](https://www.mesa3d.org) with Vulkan support
+  * If --enable-avx512, need GCC >= 5.0 ([CPUs With AVX-512 required](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#CPUs_with_AVX-512))
+  * If --enable-dnn, need [OpenVINO](https://github.com/openvinotoolkit/openvino) >= 2023.0 (2024.x recommended)
+  * If --enable-json, need [json.hpp](https://github.com/nlohmann/json/releases/) >= v3.7.3 (v3.11.x recommended)
 
 #### Building and installing:
   * Environment variable settings<BR>
@@ -127,20 +141,22 @@ OpenCL is used to improve performance in different platforms.
   * For detailed test cases, please go to [tests](https://github.com/intel/libxcam/wiki/Tests) page
 
 #### Reporting Bugs:
-  * Bugs or suggestions can be reported on the github [issues](https://github.com/intel/libxcam/issues) page
-  * Security issues, please send email to wei.zong@intel.com directly
+  * Bugs and suggestions can be reported via the issues page of this fork
+  * For security issues or direct inquiries, please email **dong.yang@intel.com**
 
 #### Mailing list
   * To post a message to all the list members, please send email to libxcam@lists.01.org
   * To register libxcam public maillist, please go to [registration](https://lists.01.org/mailman/listinfo/libxcam) page
 
 #### Maintainer:
-  * Wind Yuan <feng.yuan@intel.com>
-  * Wei Zong <wei.zong@intel.com>
+  * **Dong Yang \<dong.yang@intel.com\>** *(current, robotics porting)*
+  * Wind Yuan \<feng.yuan@intel.com\> *(original author)*
+  * Wei Zong \<wei.zong@intel.com\> *(original author)*
 
 #### Contributors: (orders by first name)
   * Ali Mansouri <ali.m.t1992@gmail.com>
   * Andrey Parfenov <a1994ndrey@gmail.com>
+  * Dong Yang <dong.yang@intel.com>
   * Fei Wang <feix.w.wang@intel.com>
   * Jia Meng <jia.meng@intel.com>
   * John Ye <john.ye@intel.com>
