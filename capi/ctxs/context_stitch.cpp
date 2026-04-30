@@ -142,6 +142,12 @@ StitchContext::set_parameters (ContextParams &param_list)
     if (_module != StitchSoft) {
         set_alloc_out_buf (true);
         set_mem_type (XCAM_MEM_TYPE_GPU);
+    } else {
+        // Soft module uses CPU (system-memory) buffers.
+        // set_alloc_out_buf(true) forces xcam_handle_execute to use the
+        // copy_extbuf path (map() + memcpy) instead of append_to_dmabuf,
+        // which requires a DMA fd unavailable for CPU XCamVideoBuffer.
+        set_alloc_out_buf (true);
     }
 
     create_buf_pool (_module);
