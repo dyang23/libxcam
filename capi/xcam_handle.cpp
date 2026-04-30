@@ -22,6 +22,9 @@
 #include "xcam_handle.h"
 #include "dma_video_buffer.h"
 #include "context_priv.h"
+#include "interface/stitcher.h"
+#include "interface/geo_mapper.h"
+#include "soft/soft_video_buf_allocator.h"
 #include <stdarg.h>
 
 using namespace XCam;
@@ -280,4 +283,118 @@ xcam_handle_execute (
     }
 
     return ret;
+}
+
+// ── Topview remapper ─────────────────────────────────────────────────────────
+
+struct TopviewRemapper {
+    SmartPtr<GeoMapper> mapper;
+    uint32_t out_w, out_h;
+    uint32_t bowl_w, bowl_h;
+};
+
+void *
+xcam_create_topview_remapper (
+    uint32_t bowl_w, uint32_t bowl_h,
+    uint32_t out_w,  uint32_t out_h,
+    float a, float b, float c,
+    float center_z, float wall_height, float ground_length)
+{
+    BowlDataConfig cfg;
+    cfg.a             = a;
+    cfg.b             = b;
+    cfg.c             = c;
+    cfg.center_z      = center_z;
+    cfg.wall_height   = wall_height;
+    cfg.ground_length = ground_length;
+    cfg.angle_start   = 0.0f;
+    cfg.angle_end     = 360.0f;
+
+    BowlModel bowl_model (cfg, bowl_w, bowl_h);
+    BowlModel::PointMap points;
+
+    float length_mm = 0.0f, width_mm = 0.0f;
+    if (!bowl_model.get_max_topview_area_mm (length_mm, width_mm)) {
+        XCAM_LOG_ERROR ("xcam_create_topview_remapper: get_max_topview_area_mm failed");
+        return NULL;
+    }
+    XCAM_LOG_INFO ("Topview max area: L=%.1fmm W=%.1fmm", length_mm, width_mm);
+
+    if (!bowl_model.get_topview_rect_map (points, out_w, out_h, length_mm, width_mm)) {
+        XCAM_LOG_ERROR ("xcam_create_topview_remapper: get_topview_rect_map failed");
+        return NULL;
+    }
+
+    SmartPtr<GeoMapper> mapper = GeoMapper::create_soft_geo_mapper ();
+    if (!mapper.ptr ()) {
+        XCAM_LOG_ERROR ("xcam_create_topview_remapper: create_soft_geo_mapper failed");
+        return NULL;
+    }
+    mapper->set_output_size (out_w, out_h);
+    if (!mapper->set_lookup_table (points.data (), out_w, out_h)) {
+        XCAM_LOG_ERROR ("xcam_create_topview_remapper: set_lookup_table failed");
+        return NULL;
+    }
+
+    TopviewRemapper *tv = new TopviewRemapper ();
+    tv->mapper  = mapper;
+    tv->out_w   = out_w;
+    tv->out_h   = out_h;
+    tv->bowl_w  = bowl_w;
+    tv->bowl_h  = bowl_h;
+    return (void *) tv;
+}
+
+XCamReturn
+xcam_topview_remap (void *remapper, XCamVideoBuffer *bowl_buf, XCamVideoBuffer *topview_buf)
+{
+    XCAM_FAIL_RETURN (ERROR, remapper && bowl_buf && topview_buf, XCAM_RETURN_ERROR_PARAM,
+                      "xcam_topview_remap: NULL argument");
+
+    TopviewRemapper *tv = (TopviewRemapper *) remapper;
+
+    // Allocate xcam VideoBuffer from SoftVideoBufAllocator
+    const XCamVideoBufferInfo &bi = bowl_buf->info;
+    VideoBufferInfo in_info;
+    in_info.init (bi.format, bi.width, bi.height, bi.aligned_width, bi.aligned_height);
+
+    SmartPtr<BufferPool> in_pool = new SoftVideoBufAllocator (in_info);
+    in_pool->reserve (1);
+    SmartPtr<VideoBuffer> in_xcam = in_pool->get_buffer (in_pool);
+    XCAM_FAIL_RETURN (ERROR, in_xcam.ptr (), XCAM_RETURN_ERROR_MEM,
+                      "xcam_topview_remap: alloc bowl VideoBuffer failed");
+
+    // memcpy bowl data in
+    uint8_t *src = bowl_buf->map (bowl_buf);
+    XCAM_FAIL_RETURN (ERROR, src, XCAM_RETURN_ERROR_MEM,
+                      "xcam_topview_remap: map bowl_buf failed");
+    uint8_t *dst_in = in_xcam->map ();
+    memcpy (dst_in, src, bi.size);
+    in_xcam->unmap ();
+    bowl_buf->unmap (bowl_buf);
+
+    // remap (out_buf=NULL → mapper allocates internally)
+    SmartPtr<VideoBuffer> out_xcam;
+    XCamReturn ret = tv->mapper->remap (in_xcam, out_xcam);
+    XCAM_FAIL_RETURN (ERROR, ret == XCAM_RETURN_NO_ERROR && out_xcam.ptr (), ret,
+                      "xcam_topview_remap: remap failed");
+
+    // copy result to external topview_buf
+    const XCamVideoBufferInfo &di = topview_buf->info;
+    uint8_t *out_src = out_xcam->map ();
+    uint8_t *out_dst = topview_buf->map (topview_buf);
+    XCAM_FAIL_RETURN (ERROR, out_src && out_dst, XCAM_RETURN_ERROR_MEM,
+                      "xcam_topview_remap: map topview_buf failed");
+    memcpy (out_dst, out_src, di.size);
+    out_xcam->unmap ();
+    topview_buf->unmap (topview_buf);
+
+    return XCAM_RETURN_NO_ERROR;
+}
+
+void
+xcam_destroy_topview_remapper (void *remapper)
+{
+    if (remapper)
+        delete (TopviewRemapper *) remapper;
 }
