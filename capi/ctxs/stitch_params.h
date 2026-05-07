@@ -275,6 +275,41 @@ soft_stitch_info (CamModel model, StitchScopicMode scopic_mode)
         info.fisheye_info[1].extrinsic.roll = 89.7f;
         break;
     }
+    case CamB4C1080P: {
+        // isx031INTC031L 1920x1536 fisheye, 4 cameras at 90-degree intervals
+        // sphere equirectangular mode: cameras face front/right/rear/left outward
+        // cx=960 cy=768 = image center; radius=768 = half of 1536 height; fov=185 degrees
+        // merge_width=0: let stitcher use the full computed overlap region
+        info.merge_width[0] = 0;
+        info.merge_width[1] = 0;
+        info.merge_width[2] = 0;
+        info.merge_width[3] = 0;
+
+        info.fisheye_info[0].intrinsic.cx     = 960.0f;
+        info.fisheye_info[0].intrinsic.cy     = 768.0f;
+        info.fisheye_info[0].intrinsic.fov    = 185.0f;
+        info.fisheye_info[0].radius           = 768.0f;
+        info.fisheye_info[0].extrinsic.roll   = 0.0f;    // front
+
+        info.fisheye_info[1].intrinsic.cx     = 960.0f;
+        info.fisheye_info[1].intrinsic.cy     = 768.0f;
+        info.fisheye_info[1].intrinsic.fov    = 185.0f;
+        info.fisheye_info[1].radius           = 768.0f;
+        info.fisheye_info[1].extrinsic.roll   = 90.0f;   // right
+
+        info.fisheye_info[2].intrinsic.cx     = 960.0f;
+        info.fisheye_info[2].intrinsic.cy     = 768.0f;
+        info.fisheye_info[2].intrinsic.fov    = 185.0f;
+        info.fisheye_info[2].radius           = 768.0f;
+        info.fisheye_info[2].extrinsic.roll   = 180.0f;  // rear
+
+        info.fisheye_info[3].intrinsic.cx     = 960.0f;
+        info.fisheye_info[3].intrinsic.cy     = 768.0f;
+        info.fisheye_info[3].intrinsic.fov    = 185.0f;
+        info.fisheye_info[3].radius           = 768.0f;
+        info.fisheye_info[3].extrinsic.roll   = 270.0f;  // left
+        break;
+    }
     case CamC3C8K: {
         switch (scopic_mode) {
         case ScopicStereoLeft: {

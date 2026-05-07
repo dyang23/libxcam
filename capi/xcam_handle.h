@@ -84,6 +84,37 @@ XCamReturn xcam_handle_uinit (XCamHandle *handle);
  */
 XCamReturn xcam_handle_execute (XCamHandle *handle, XCamVideoBuffer **buf_in, XCamVideoBuffer **buf_out);
 
+/* ── Topview remapper ────────────────────────────────────────────────────────
+ * Convert a bowl-stitched NV12 image to a flat bird's-eye (top-down) view.
+ *
+ * Usage:
+ *   void *tv = xcam_create_topview_remapper(bowl_w, bowl_h,
+ *                                            out_w, out_h,
+ *                                            a, b, c,
+ *                                            center_z, wall_height, ground_length);
+ *   xcam_topview_remap(tv, bowl_buf, topview_buf);
+ *   xcam_destroy_topview_remapper(tv);
+ *
+ * bowl_w/h   : dimensions of the bowl-stitched input (output of xcam_handle_execute)
+ * out_w/h    : desired topview output resolution
+ * a,b,c      : BowlDataConfig ellipsoid semi-axes (mm)
+ * center_z   : camera height above ellipsoid center (mm)
+ * wall_height: bowl wall height (mm)
+ * ground_length: ground projection length (mm)
+ */
+void *xcam_create_topview_remapper (
+    uint32_t bowl_w, uint32_t bowl_h,
+    uint32_t out_w,  uint32_t out_h,
+    float a, float b, float c,
+    float center_z, float wall_height, float ground_length);
+
+XCamReturn xcam_topview_remap (
+    void *remapper,
+    XCamVideoBuffer *bowl_buf,
+    XCamVideoBuffer *topview_buf);
+
+void xcam_destroy_topview_remapper (void *remapper);
+
 XCAM_END_DECLARE
 
 #endif //C_XCAM_HANDLE_H

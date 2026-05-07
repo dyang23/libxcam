@@ -23,7 +23,8 @@
 #include "dnn_inference_utils.h"
 
 #include <iomanip>
-#include <ngraph/ngraph.hpp>
+// ngraph/ngraph.hpp removed: ngraph was deprecated in OV 2022.1 and removed
+// in OV 2024.0+. All functionality is now in openvino/openvino.hpp (via dnn_inference_engine.h)
 
 #if HAVE_OPENCV
 #include "ocv/cv_std.h"
