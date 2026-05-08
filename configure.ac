@@ -63,6 +63,7 @@ XCAM_ARG_ENABLE(gst, --enable-gst, enable_gst, no, enable gstreamer plugin)
 XCAM_ARG_ENABLE(libcl, --enable-libcl, enable_libcl, yes, enable libcl image processor)
 XCAM_ARG_ENABLE(gles, --enable-gles, enable_gles, no, enable gles)
 XCAM_ARG_ENABLE(vulkan, --enable-vulkan, enable_vulkan, no, enable vulkan)
+XCAM_ARG_ENABLE(avx2, --enable-avx2, enable_avx2, no, enable avx2)
 XCAM_ARG_ENABLE(avx512, --enable-avx512, enable_avx512, no, enable avx512)
 XCAM_ARG_ENABLE(opencv, --enable-opencv, enable_opencv, no, enable opencv library)
 XCAM_ARG_ENABLE(capi, --enable-capi, enable_capi, no, enable libxcam-capi library)
@@ -81,6 +82,7 @@ XCAM_CHECK_MODULE($enable_vulkan, vulkan, LIBVULKAN, HAVE_VULKAN=1, HAVE_VULKAN=
 
 XCAM_CHECK_GAWK($HAVE_LIBCL, $HAVE_GLES)
 XCAM_CHECK_DOXYGEN($enable_docs, [], enable_docs="no")
+XCAM_CHECK_AVX2($enable_avx2, ENABLE_AVX2=1, ENABLE_AVX2=0)
 XCAM_CHECK_AVX512($enable_avx512, ENABLE_AVX512=1, ENABLE_AVX512=0)
 XCAM_CHECK_OSG($enable_render, $XCAM_REQUIRE_OSG_MIN, ENABLE_RENDER=1, ENABLE_RENDER=0)
 XCAM_CHECK_DNN($enable_dnn, $XCAM_REQUIRE_DNN_MIN, ENABLE_DNN=1, ENABLE_DNN=0)
@@ -115,6 +117,7 @@ XCAM_DEFINE_MACOR(HAVE_LIBCL, $HAVE_LIBCL, have libcl)
 XCAM_DEFINE_MACOR(HAVE_GLES, $HAVE_GLES, have gles)
 XCAM_DEFINE_MACOR(HAVE_GBM, $HAVE_GBM, have gbm)
 XCAM_DEFINE_MACOR(HAVE_VULKAN, $HAVE_VULKAN, have vulkan)
+XCAM_DEFINE_MACOR(ENABLE_AVX2, $ENABLE_AVX2, have avx2 instruction)
 XCAM_DEFINE_MACOR(ENABLE_AVX512, $ENABLE_AVX512, have avx instruction)
 XCAM_DEFINE_MACOR(ENABLE_RENDER, $ENABLE_RENDER, enable texture render)
 XCAM_DEFINE_MACOR(ENABLE_DNN, $ENABLE_DNN, have dnn)
@@ -175,6 +178,7 @@ XCAM_IF($USE_LOCAL_ATOMISP, 1, use_local_atomisp="yes", use_local_atomisp="no")
 XCAM_IF($HAVE_LIBCL, 1, have_libcl="yes", have_libcl="no")
 XCAM_IF($HAVE_GLES, 1, have_gles="yes", have_gles="no")
 XCAM_IF($HAVE_VULKAN, 1, have_vulkan="yes", have_vulkan="no")
+XCAM_IF($ENABLE_AVX2, 1, enable_avx2="yes", enable_avx2="no")
 XCAM_IF($ENABLE_AVX512, 1, enable_avx512="yes", enable_avx512="no")
 XCAM_IF($HAVE_OPENCV, 1, have_opencv="yes", have_opencv="no")
 XCAM_IF($ENABLE_RENDER, 1, enable_render="yes", enable_render="no")
@@ -198,6 +202,7 @@ echo "
      enable OpenCL              : $have_libcl
      enable GLES                : $have_gles
      enable Vulkan              : $have_vulkan
+     enable AVX2 instruction   : $enable_avx2
      enable AVX512 instruction  : $enable_avx512
      enable OSG render          : $enable_render
      enable DNN                 : $enable_dnn
