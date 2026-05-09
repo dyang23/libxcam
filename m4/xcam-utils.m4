@@ -128,6 +128,18 @@ AC_DEFUN([XCAM_CHECK_DVS_OCL],
         [$3])
 ])
 
+# XCAM_CHECK_AVX2([$1:value], [$2:if-found], [$3:if-not-found])
+AC_DEFUN([XCAM_CHECK_AVX2],
+[
+    AS_IF([test "x$1" = "xyes"],
+        [
+            count=`grep -c avx2 /proc/cpuinfo`
+            AS_IF([test $count -gt 0], [], [AC_MSG_WARN(the processor does not support AVX2 instructions)])
+            [$2]
+        ],
+        [$3])
+])
+
 # XCAM_CHECK_AVX512([$1:value], [$2:if-found], [$3:if-not-found])
 AC_DEFUN([XCAM_CHECK_AVX512],
 [

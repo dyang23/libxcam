@@ -29,6 +29,8 @@
 
 #if ENABLE_AVX512
 #include <immintrin.h>
+#elif ENABLE_AVX2
+#include <immintrin.h>
 #endif
 
 #if ENABLE_AVX512
@@ -127,6 +129,8 @@ public:
     inline void read_interpolate_array (Float2 *pos, Float2 *array) const;
     inline void read_interpolate_array (Float2 *pos, Uchar *array, bool is_chroma = false) const;
     inline void read_interpolate_array (Float2 *pos, Uchar2 *array) const;
+#elif ENABLE_AVX2
+    inline void read_interpolate_array (Float2 *pos, Uchar *array) const;
 #endif
 
     template<uint32_t N>
@@ -638,6 +642,98 @@ SoftImage<T>::read_interpolate_array (Float2 *pos, Uchar2 *array) const
     _mm_store_ss (dest + 1,  (__m128)_mm512_extractf32x4_ps ((__m512)interp_value, 1));
     _mm_store_ss (dest + 2,  (__m128)_mm512_extractf32x4_ps ((__m512)interp_value, 2));
     _mm_store_ss (dest + 3,  (__m128)_mm512_extractf32x4_ps ((__m512)interp_value, 3));
+}
+
+#elif ENABLE_AVX2
+
+// AVX2 optimized: interpolate 8 pixels (Uchar output)
+// Uses 256-bit registers to process 8 pixel positions
+template <typename T>
+void
+SoftImage<T>::read_interpolate_array (Float2 *pos, Uchar *array) const
+{
+    float* dest = (float*)array;
+    __m256 const_one_float = _mm256_set1_ps (1.0f);
+    __m256i const_pitch = _mm256_set1_epi32 (_pitch);
+    __m256i const_one_int = _mm256_set1_epi32 (1);
+
+    // load 8 interpolate pos (8 x Float2 = 16 floats) in two 256-bit loads
+    __m256 pos_lo = _mm256_loadu_ps ((float*)&pos[0]);  // x0,y0,x1,y1,x2,y2,x3,y3
+    __m256 pos_hi = _mm256_loadu_ps ((float*)&pos[4]);  // x4,y4,x5,y5,x6,y6,x7,y7
+
+    __m256 pos_floor_lo = _mm256_floor_ps (pos_lo);
+    __m256 pos_floor_hi = _mm256_floor_ps (pos_hi);
+
+    __m256 weight_lo = _mm256_sub_ps (pos_lo, pos_floor_lo);
+    __m256 weight_hi = _mm256_sub_ps (pos_hi, pos_floor_hi);
+
+    // separate x and y weights: shuffle lo/hi to get all x's and all y's
+    __m256 weight_x = _mm256_shuffle_ps (weight_lo, weight_hi, 0x88);
+    __m256 weight_y = _mm256_shuffle_ps (weight_lo, weight_hi, 0xDD);
+    weight_x = _mm256_castsi256_ps (_mm256_permute4x64_epi64 (_mm256_castps_si256 (weight_x), 0xD8));
+    weight_y = _mm256_castsi256_ps (_mm256_permute4x64_epi64 (_mm256_castps_si256 (weight_y), 0xD8));
+
+    __m256 weight_x_1 = _mm256_sub_ps (const_one_float, weight_x);
+    __m256 weight_y_1 = _mm256_sub_ps (const_one_float, weight_y);
+
+    // compute position indices relative to base
+    float base_y = floorf (pos[0].y);
+    __m256 pos_00_lo = _mm256_setr_ps (0, base_y, 0, base_y, 0, base_y, 0, base_y);
+    __m256 pos_00_hi = pos_00_lo;
+
+    __m256i pos_index_lo = _mm256_cvtps_epi32 (_mm256_sub_ps (pos_floor_lo, pos_00_lo));
+    __m256i pos_index_hi = _mm256_cvtps_epi32 (_mm256_sub_ps (pos_floor_hi, pos_00_hi));
+
+    // separate x and y indices
+    __m256 idx_lo_f = _mm256_castsi256_ps (pos_index_lo);
+    __m256 idx_hi_f = _mm256_castsi256_ps (pos_index_hi);
+    __m256i pos_idx_x = _mm256_castps_si256 (_mm256_shuffle_ps (idx_lo_f, idx_hi_f, 0x88));
+    __m256i pos_idx_y = _mm256_castps_si256 (_mm256_shuffle_ps (idx_lo_f, idx_hi_f, 0xDD));
+    pos_idx_x = _mm256_permute4x64_epi64 (pos_idx_x, 0xD8);
+    pos_idx_y = _mm256_permute4x64_epi64 (pos_idx_y, 0xD8);
+
+    int32_t pos_y0 = (int32_t)(pos[0].y);
+    border_check_y (pos_y0);
+    const T* base = ((const T*)(_buf_ptr + pos_y0 * _pitch));
+
+    // compute offsets for gather
+    __m256i offset_top0 = _mm256_add_epi32 (pos_idx_x, _mm256_mullo_epi32 (pos_idx_y, const_pitch));
+    __m256i offset_top1 = _mm256_add_epi32 (offset_top0, const_one_int);
+    __m256i offset_bottom0 = _mm256_add_epi32 (pos_idx_x,
+        _mm256_mullo_epi32 (_mm256_add_epi32 (pos_idx_y, const_one_int), const_pitch));
+    __m256i offset_bottom1 = _mm256_add_epi32 (offset_bottom0, const_one_int);
+
+    // gather 8 pixels from 4 corners (byte gather emulated via int gather + mask)
+    __m256i mask = _mm256_set1_epi32 (0xFF);
+    __m256i tmp;
+
+    tmp = _mm256_i32gather_epi32 ((const int*)base, offset_top0, 1);
+    __m256 pixel_tl = _mm256_cvtepi32_ps (_mm256_and_si256 (tmp, mask));
+
+    tmp = _mm256_i32gather_epi32 ((const int*)base, offset_top1, 1);
+    __m256 pixel_tr = _mm256_cvtepi32_ps (_mm256_and_si256 (tmp, mask));
+
+    tmp = _mm256_i32gather_epi32 ((const int*)base, offset_bottom0, 1);
+    __m256 pixel_bl = _mm256_cvtepi32_ps (_mm256_and_si256 (tmp, mask));
+
+    tmp = _mm256_i32gather_epi32 ((const int*)base, offset_bottom1, 1);
+    __m256 pixel_br = _mm256_cvtepi32_ps (_mm256_and_si256 (tmp, mask));
+
+    // bilinear interpolation
+    __m256 interp_value_f = _mm256_fmadd_ps (pixel_tl, _mm256_mul_ps (weight_x_1, weight_y_1),
+                            _mm256_mul_ps (pixel_tr, _mm256_mul_ps (weight_x, weight_y_1))) +
+                            _mm256_fmadd_ps (pixel_bl, _mm256_mul_ps (weight_x_1, weight_y),
+                                    _mm256_mul_ps (pixel_br, _mm256_mul_ps (weight_x, weight_y)));
+
+    // convert to uint8
+    interp_value_f = _mm256_round_ps (interp_value_f, _MM_FROUND_TO_NEAREST_INT);
+    __m256i interp_value = _mm256_cvtps_epi32 (interp_value_f);
+    interp_value = _mm256_packs_epi32 (interp_value, interp_value);
+    interp_value = _mm256_packus_epi16 (interp_value, interp_value);
+
+    // store 8 bytes (2 x 4 bytes from each 128-bit lane)
+    _mm_store_ss (dest, (__m128)_mm256_extractf128_si256 (interp_value, 0));
+    _mm_store_ss (dest + 1, (__m128)_mm256_extractf128_si256 (interp_value, 1));
 }
 
 #endif

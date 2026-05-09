@@ -159,6 +159,20 @@ static void map_image (
                 convert_to_uchar_N<float, XCAM_SOFT_WORKUNIT_PIXELS> (interp_value, interp_pixel_vaule);
             }
         }
+#elif ENABLE_AVX2
+        BoundState interp_bound = BoundInternal;
+        check_interp_bound (in->get_width (), in->get_height (), interp_pos, XCAM_SOFT_WORKUNIT_PIXELS - 1, interp_bound);
+        if (!is_chroma && interp_bound == BoundInternal) {
+            in->read_interpolate_array (interp_pos, interp_pixel_vaule);
+        } else {
+            if (is_chroma) {
+                in->read_interpolate_array < float, XCAM_SOFT_WORKUNIT_PIXELS / 2 > (interp_pos, interp_value);
+                convert_to_uchar_N < float, XCAM_SOFT_WORKUNIT_PIXELS / 2 > (interp_value, interp_pixel_vaule);
+            } else {
+                in->read_interpolate_array<float, XCAM_SOFT_WORKUNIT_PIXELS> (interp_pos, interp_value);
+                convert_to_uchar_N<float, XCAM_SOFT_WORKUNIT_PIXELS> (interp_value, interp_pixel_vaule);
+            }
+        }
 #else
         if (is_chroma) {
             in->read_interpolate_array < float, XCAM_SOFT_WORKUNIT_PIXELS / 2 > (interp_pos, interp_value);

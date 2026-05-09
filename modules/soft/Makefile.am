@@ -14,6 +14,12 @@ if ENABLE_AVX512
 XCAMSOFT_CXXFLAGS += \
     -mavx -mavx2 -mavx512f -mavx512cd -mavx512vl -mavx512bw -mavx512dq -msse3 -msse4.1 -msse4.2 -msse4a -mfma\
     $(NULL)
+else
+if ENABLE_AVX2
+XCAMSOFT_CXXFLAGS += \
+    -mavx -mavx2 -msse3 -msse4.1 -msse4.2 -mfma\
+    $(NULL)
+endif
 endif
 
 if HAVE_OPENCV
