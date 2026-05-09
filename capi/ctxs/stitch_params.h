@@ -246,6 +246,7 @@ get_fisheye_info (CamModel model, StitchScopicMode scopic_mode, FisheyeInfo* fis
             fisheye_info[i].intrinsic = info.fisheye_info[i].intrinsic;
             fisheye_info[i].extrinsic = info.fisheye_info[i].extrinsic;
             fisheye_info[i].cam_model = info.fisheye_info[i].cam_model;
+            fisheye_info[i].radius    = info.fisheye_info[i].radius;
             for (uint32_t j = 0; j < sizeof (FisheyeInfo::distort_coeff) / sizeof(float); j++) {
                 fisheye_info[i].distort_coeff[j] = info.fisheye_info[i].distort_coeff[j];
             }
