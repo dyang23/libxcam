@@ -25,6 +25,9 @@
 #include "xcam_utils.h"
 #include "context_priv.h"
 #include "interface/stitcher.h"
+#if HAVE_LIBCL
+#include "ocl/cl_image_handler.h"
+#endif
 
 namespace XCam {
 
@@ -32,7 +35,8 @@ enum StitchModule {
     StitchNone    = 0,
     StitchSoft,
     StitchGLES,
-    StitchVulkan
+    StitchVulkan,
+    StitchCL
 };
 
 class StitchContext
@@ -63,6 +67,9 @@ private:
 
 private:
     SmartPtr<Stitcher>        _stitcher;
+#if HAVE_LIBCL
+    SmartPtr<CLImageHandler>  _cl_handler;
+#endif
 
     StitchModule              _module;
     uint32_t                  _cam_model;

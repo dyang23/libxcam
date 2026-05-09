@@ -28,6 +28,11 @@
 #if HAVE_VULKAN
 #include "vulkan/vk_device.h"
 #endif
+#if HAVE_LIBCL
+#include "ocl/cl_device.h"
+#include "ocl/cl_video_buffer.h"
+#include "ocl/cl_image_360_stitch.h"
+#endif
 
 namespace XCam {
 
@@ -49,6 +54,7 @@ static const Pair module_pairs[] = {
     {StitchSoft, "soft"},
     {StitchGLES, "gles"},
     {StitchVulkan, "vulkan"},
+    {StitchCL, "cl"},
     {0, NULL}
 };
 
@@ -158,7 +164,7 @@ StitchContext::set_parameters (ContextParams &param_list)
     CamModel cam_model = (CamModel)_cam_model;
     viewpoints_range (cam_model, _viewpoints_range);
     _fm_cfg = (_module == StitchVulkan) ? vk_fm_config (cam_model) :
-              ((_module == StitchGLES) ? gl_fm_config (cam_model) : soft_fm_config (cam_model));
+              ((_module == StitchGLES || _module == StitchCL) ? gl_fm_config (cam_model) : soft_fm_config (cam_model));
 
     if (_dewarp_mode == DewarpSphere) {
         _fm_region_ratio = fm_region_ratio (cam_model);
@@ -176,6 +182,42 @@ StitchContext::set_parameters (ContextParams &param_list)
 XCamReturn
 StitchContext::init_handler ()
 {
+#if HAVE_LIBCL
+    if (_module == StitchCL) {
+        SmartPtr<CLContext> cl_context = CLDevice::instance ()->get_context ();
+        XCAM_FAIL_RETURN (
+            ERROR, cl_context.ptr (), XCAM_RETURN_ERROR_UNKNOWN,
+            "StitchContext: init CL handler failed, cl-context is NULL");
+
+        StitchResMode res_mode = (_fisheye_num <= 2) ? StitchRes1080P2Cams : StitchRes1080P4Cams;
+        SmartPtr<CLImageHandler> handler = create_image_360_stitch (
+            cl_context, false, CLBlenderScaleLocal,
+            false, false, _dewarp_mode, res_mode, _fisheye_num);
+        XCAM_FAIL_RETURN (
+            ERROR, handler.ptr (), XCAM_RETURN_ERROR_UNKNOWN,
+            "StitchContext: create CLImage360Stitch handler failed");
+
+        SmartPtr<CLImage360Stitch> cl_stitch = handler.dynamic_cast_ptr<CLImage360Stitch> ();
+        XCAM_ASSERT (cl_stitch.ptr ());
+
+        cl_stitch->set_output_size (get_out_width (), get_out_height ());
+#if HAVE_OPENCV
+        cl_stitch->set_feature_match (_fm_mode != FMNone);
+#endif
+        if (_dewarp_mode == DewarpBowl) {
+            cl_stitch->set_intrinsic_names (intrinsic_names);
+            cl_stitch->set_extrinsic_names (extrinsic_names);
+        }
+        // Note: Do NOT call cl_stitch->set_stitch_info() here.
+        // CLImage360Stitch initializes its own params via
+        // get_default_stitch_info(_res_mode) in prepare_parameters().
+
+        handler->disable_buf_pool (!need_alloc_out_buf ());
+        _cl_handler = handler;
+        return XCAM_RETURN_NO_ERROR;
+    }
+#endif
+
     SmartPtr<Stitcher> stitcher = create_stitcher (_module);
     XCAM_ASSERT (stitcher.ptr ());
     _stitcher = stitcher;
@@ -188,6 +230,12 @@ StitchContext::init_handler ()
 XCamReturn
 StitchContext::uinit_handler ()
 {
+#if HAVE_LIBCL
+    if (_cl_handler.ptr ()) {
+        _cl_handler->emit_stop ();
+        _cl_handler.release ();
+    }
+#endif
     if (_stitcher.ptr ())
         _stitcher.release ();
 
@@ -197,6 +245,10 @@ StitchContext::uinit_handler ()
 bool
 StitchContext::is_handler_valid () const
 {
+#if HAVE_LIBCL
+    if (_module == StitchCL)
+        return _cl_handler.ptr () ? true : false;
+#endif
     return _stitcher.ptr () ? true : false;
 }
 
@@ -206,6 +258,13 @@ StitchContext::execute (SmartPtr<VideoBuffer> &buf_in, SmartPtr<VideoBuffer> &bu
     XCAM_FAIL_RETURN (
         ERROR, buf_in.ptr () && (need_alloc_out_buf () || buf_out.ptr ()),
         XCAM_RETURN_ERROR_MEM, "input or output buffer is NULL");
+
+#if HAVE_LIBCL
+    if (_module == StitchCL) {
+        // CLMultiImageHandler handles attached buffers internally
+        return _cl_handler->execute (buf_in, buf_out);
+    }
+#endif
 
     VideoBufferList in_buffers;
     in_buffers.push_back (buf_in);
@@ -263,6 +322,10 @@ StitchContext::create_buf_pool (StitchModule module)
 #if HAVE_VULKAN
         pool = create_vk_buffer_pool (VKDevice::default_device ());
         XCAM_ASSERT (pool.ptr ());
+#endif
+    } else if (module == StitchCL) {
+#if HAVE_LIBCL
+        pool = new CLVideoBufferPool ();
 #endif
     }
     XCAM_ASSERT (pool.ptr ());
@@ -328,7 +391,7 @@ StitchContext::show_help ()
     printf (
         "Usage:  params=help=1 module=soft fisheyenum=3 ...\n"
         "  module      : Processing module\n"
-        "                Range   : [soft, gles, vulkan]\n"
+        "                Range   : [soft, gles, vulkan, cl]\n"
         "                Default : soft\n"
         "  fisheyenum  : Number of fisheye lens\n"
         "                Range   : [2 - %d]\n"

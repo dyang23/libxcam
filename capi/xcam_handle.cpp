@@ -320,9 +320,27 @@ xcam_create_topview_remapper (
     }
     XCAM_LOG_INFO ("Topview max area: L=%.1fmm W=%.1fmm", length_mm, width_mm);
 
-    if (!bowl_model.get_topview_rect_map (points, out_w, out_h, length_mm, width_mm)) {
-        XCAM_LOG_ERROR ("xcam_create_topview_remapper: get_topview_rect_map failed");
-        return NULL;
+    // Build LUT with standard BEV orientation (front=top, left=left) and
+    // uniform mm/px scale so the image is geometrically correct on screen.
+    // Use the smaller of (width/out_w, length/out_h) so both axes fit within
+    // the bowl's valid ground area.
+    {
+        float mm_per_px = std::min (length_mm / out_h, width_mm / out_w);
+        float cx = out_w / 2.0f;
+        float cy = out_h / 2.0f;
+        points.resize (out_w * out_h);
+        XCAM_LOG_INFO ("Topview mm/px=%.2f  coverage=%.0fmm x %.0fmm",
+                       mm_per_px, mm_per_px * out_w, mm_per_px * out_h);
+        for (uint32_t row = 0; row < out_h; row++) {
+            for (uint32_t col = 0; col < out_w; col++) {
+                PointFloat3 world_pos (
+                    (cy - row) * mm_per_px,   // X: front-rear (row=0 → front)
+                    (cx - col) * mm_per_px,   // Y: left-right (col=0 → left)
+                    0.0f);
+                points[out_w * row + col] =
+                    bowl_view_coords_to_image (cfg, world_pos, bowl_w, bowl_h);
+            }
+        }
     }
 
     SmartPtr<GeoMapper> mapper = GeoMapper::create_soft_geo_mapper ();
