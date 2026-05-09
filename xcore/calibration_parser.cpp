@@ -440,7 +440,7 @@ CalibrationParser::parse_fisheye_camera_param (const char *file_path, FisheyeInf
         }
 
         int32_t cam_id = 0;
-        for (json::iterator cam = camera->begin (); cam != camera->end (), cam_id < camera_count; cam++) {
+        for (json::iterator cam = camera->begin (); cam != camera->end () && cam_id < camera_count; cam++) {
 
             auto const cam_radius = cam->find ("radius");
             if (cam_radius != cam->end ()) {
@@ -527,7 +527,7 @@ CalibrationParser::parse_fisheye_camera_param (const char *file_path, FisheyeInf
             auto const cam_d = cam->find ("D");
             if (cam_d != cam->end ()) {
                 uint32_t i = 0;
-                for (json::iterator d_vec = cam_d->begin (); d_vec != cam_d->end (), i < 4; d_vec++, i++) {
+                for (json::iterator d_vec = cam_d->begin (); d_vec != cam_d->end () && i < 4; d_vec++, i++) {
                     fisheye_info[cam_id].distort_coeff[i] = d_vec->get<float>();
                     XCAM_LOG_DEBUG ("d[%d]: %f ", i, d_vec->get<float>());
                 }
@@ -537,7 +537,7 @@ CalibrationParser::parse_fisheye_camera_param (const char *file_path, FisheyeInf
             if (cam_r != cam->end ()) {
                 Mat3f rotation;
                 uint32_t i = 0;
-                for (json::iterator r_mat = cam_r->begin (); r_mat != cam_r->end (), i < 9; r_mat++, i++) {
+                for (json::iterator r_mat = cam_r->begin (); r_mat != cam_r->end () && i < 9; r_mat++, i++) {
                     rotation (i / 3, i % 3) = r_mat->get<float>();
                 }
                 Quaternion<float> quat = create_quaternion (rotation);
@@ -553,7 +553,7 @@ CalibrationParser::parse_fisheye_camera_param (const char *file_path, FisheyeInf
             if (cam_t != cam->end ()) {
                 uint32_t i = 0;
                 Vec3f translation;
-                for (json::iterator t_vec = cam_t->begin (); t_vec != cam_t->end (), i < 3; t_vec++, i++) {
+                for (json::iterator t_vec = cam_t->begin (); t_vec != cam_t->end () && i < 3; t_vec++, i++) {
                     translation[i] = t_vec->get<float>();
                     XCAM_LOG_DEBUG ("t[%d]: %f ", i, t_vec->get<float>());
                 }
@@ -565,7 +565,7 @@ CalibrationParser::parse_fisheye_camera_param (const char *file_path, FisheyeInf
             auto const cam_c = cam->find ("c");
             if (cam_c != cam->end ()) {
                 uint32_t i = 0;
-                for (json::iterator c_vec = cam_c->begin (); c_vec != cam_c->end (), i < 3; c_vec++, i++) {
+                for (json::iterator c_vec = cam_c->begin (); c_vec != cam_c->end () && i < 3; c_vec++, i++) {
                     fisheye_info[cam_id].c_coeff[i] = c_vec->get<float>();
                     XCAM_LOG_DEBUG ("c[%d]: %f ", i, c_vec->get<float>());
                 }

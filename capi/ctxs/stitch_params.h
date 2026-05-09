@@ -22,6 +22,8 @@
 
 #if HAVE_JSON
 #include <calibration_parser.h>
+#include <cstdlib>
+#include <cstring>
 #endif
 
 namespace XCam {
@@ -48,7 +50,7 @@ static const char *extrinsic_names[] = {
 
 #if HAVE_JSON
 static const char *camera_calibration_json_names[] = {
-    "",
+    "isx031_4cam_calib.json",
     "",
     "",
     "k_camera_calibration.json"
@@ -85,8 +87,10 @@ viewpoints_range (CamModel model, float *range)
 {
     switch (model) {
     case CamA2C1080P: {
-        range[0] = 202.8f;
-        range[1] = 202.8f;
+        range[0] = 144.0f;
+        range[1] = 144.0f;
+        range[2] = 144.0f;
+        range[3] = 144.0f;
         break;
     }
     case CamB4C1080P: {
@@ -221,12 +225,33 @@ get_fisheye_info (CamModel model, StitchScopicMode scopic_mode, FisheyeInfo* fis
     CalibrationParser parser;
     StitchInfo info;
 
-    ret = parser.parse_fisheye_camera_param (camera_calibration_json_names[model], info.fisheye_info, XCAM_STITCH_FISHEYE_MAX_NUM);
+    // Build full path: $FISHEYE_CONFIG_PATH/<json_name>
+    const char *json_name = camera_calibration_json_names[model];
+    std::string full_path;
+    const char *env = std::getenv ("FISHEYE_CONFIG_PATH");
+    if (env && strlen (env) > 0) {
+        full_path = std::string (env) + "/" + json_name;
+    } else {
+        full_path = json_name;
+    }
+
+    ret = parser.parse_fisheye_camera_param (full_path.c_str (), info.fisheye_info, XCAM_STITCH_FISHEYE_MAX_NUM);
     if (XCAM_RETURN_NO_ERROR != ret) {
         return ret;
     }
 
     switch (scopic_mode) {
+    case ScopicMono: {
+        for (uint32_t i = 0; i < 6; i++) {
+            fisheye_info[i].intrinsic = info.fisheye_info[i].intrinsic;
+            fisheye_info[i].extrinsic = info.fisheye_info[i].extrinsic;
+            fisheye_info[i].cam_model = info.fisheye_info[i].cam_model;
+            for (uint32_t j = 0; j < sizeof (FisheyeInfo::distort_coeff) / sizeof(float); j++) {
+                fisheye_info[i].distort_coeff[j] = info.fisheye_info[i].distort_coeff[j];
+            }
+        }
+        break;
+    }
     case ScopicStereoLeft: {
         for (uint32_t i = 0; i < 3; i++) {
             fisheye_info[i].intrinsic = info.fisheye_info[2 * i].intrinsic;
