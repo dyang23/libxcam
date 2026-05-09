@@ -48,7 +48,7 @@ static const char *extrinsic_names[] = {
 
 #if HAVE_JSON
 static const char *camera_calibration_json_names[] = {
-    "",
+    "isx031_4cam_calib.json",
     "",
     "",
     "camera_calibration_CamC3C8K.json",
