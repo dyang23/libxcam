@@ -189,6 +189,25 @@ BowlFisheyeDewarp::gen_table (FisheyeDewarp::MapTable &map_table)
     float scale_factor_w = (float) out_w / tbl_w;
     float scale_factor_h = (float) out_h / tbl_h;
 
+    // Compute max valid image radius from the Scaramuzza polynomial.
+    // For equidistant fisheye: r = f * theta, max_r = f * (fov/2).
+    // In Scaramuzza's elevation-based convention: angle_at_fov_edge = (fov/2 - π/2)
+    // r_max = Σ poly_coeff[i] * angle^i
+    // Points beyond r_max are outside the fisheye circle → mark as out-of-bounds.
+    const IntrinsicParameter intr_check = get_intr_param ();
+    float max_r_sq = 0.0f;
+    if (intr_check.fov > 0 && intr_check.poly_length > 0) {
+        float fov_half_rad = intr_check.fov * XCAM_PI / 360.0f;
+        float angle_edge = fov_half_rad - XCAM_PI / 2.0f;
+        float p = 1.0f, max_r = 0.0f;
+        for (uint32_t k = 0; k < intr_check.poly_length; k++) {
+            max_r += intr_check.poly_coeff[k] * p;
+            p *= angle_edge;
+        }
+        max_r_sq = max_r * max_r;
+        XCAM_LOG_INFO ("bowl fisheye-dewarp: fov=%.0f max_r=%.1f", intr_check.fov, max_r);
+    }
+
     PointFloat2 img_coord, out_pos;
     PointFloat3 world_coord, cam_coord, cam_world_coord;
     for(uint32_t row = 0; row < tbl_h; row++) {
@@ -200,6 +219,18 @@ BowlFisheyeDewarp::gen_table (FisheyeDewarp::MapTable &map_table)
             cal_cam_world_coord (world_coord, cam_world_coord);
             world_coord2cam (cam_world_coord, cam_coord);
             cal_img_coord (cam_coord, img_coord);
+
+            // Clamp to fisheye circle: if the projected point falls outside
+            // the valid fisheye radius, mark as out-of-bounds so the remap
+            // produces black instead of sampling sensor noise outside the circle.
+            if (max_r_sq > 0.0f) {
+                float dx = img_coord.x - intr_check.cx;
+                float dy = img_coord.y - intr_check.cy;
+                if (dx * dx + dy * dy > max_r_sq) {
+                    img_coord.x = -1.0f;
+                    img_coord.y = -1.0f;
+                }
+            }
 
             map_table[row * tbl_w + col] = img_coord;
         }
@@ -287,7 +318,7 @@ PolyBowlFisheyeDewarp::cal_img_coord (const PointFloat3 &cam_coord, PointFloat2 
         img_coord.x = img_x * intr.c + img_y * intr.d + intr.cx;
         img_coord.y = img_x * intr.e + img_y + intr.cy;
     } else {
-        img_coord.x = intr.cy;
+        img_coord.x = intr.cx;
         img_coord.y = intr.cy;
     }
 } // Adopt Scaramuzza's approach to calculate image coordinates from camera coordinates

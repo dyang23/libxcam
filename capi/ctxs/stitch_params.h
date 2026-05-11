@@ -50,8 +50,8 @@ static const char *extrinsic_names[] = {
 
 #if HAVE_JSON
 static const char *camera_calibration_json_names[] = {
-    "isx031_4cam_calib.json",
     "",
+    "isx031_4cam_calib.json",
     "",
     "k_camera_calibration.json"
 };
@@ -64,14 +64,20 @@ bowl_config (CamModel model)
 
     switch (model) {
     case CamB4C1080P: {
-        bowl.a = 6060.0f;
-        bowl.b = 4388.0f;
-        bowl.c = 3003.4f;
+        // Robot-scale bowl: cameras ~100mm from center
+        // a,b = half-axes of the ellipsoid ground footprint (mm)
+        // c   = half-axis vertical
+        // Keep bowl small so camera offsets (100mm) are significant (~20% of radius)
+        bowl.a = 500.0f;
+        bowl.b = 500.0f;
+        bowl.c = 350.0f;
         bowl.angle_start = 0.0f;
         bowl.angle_end = 360.0f;
-        bowl.center_z = 1500.0f;
-        bowl.wall_height = 1800.0f;
-        bowl.ground_length = 3000.0f;
+        bowl.center_z = 160.0f;
+        bowl.wall_height = 200.0f;
+        // ground_length must be < a_ground - max_cam_dist (444.7 - 100 = 344.7)
+        // so the inner bowl edge never goes behind cameras
+        bowl.ground_length = 300.0f;
         break;
     }
     default:
@@ -87,17 +93,15 @@ viewpoints_range (CamModel model, float *range)
 {
     switch (model) {
     case CamA2C1080P: {
+        range[0] = 202.8f;
+        range[1] = 202.8f;
+        break;
+    }
+    case CamB4C1080P: {
         range[0] = 144.0f;
         range[1] = 144.0f;
         range[2] = 144.0f;
         range[3] = 144.0f;
-        break;
-    }
-    case CamB4C1080P: {
-        range[0] = 64.0f;
-        range[1] = 160.0f;
-        range[2] = 64.0f;
-        range[3] = 160.0f;
         break;
     }
     case CamC3C8K: {
@@ -127,6 +131,13 @@ fm_region_ratio (CamModel model)
 
     switch (model) {
     case CamA2C1080P: {
+        ratio.pos_x = 0.0f;
+        ratio.width = 1.0f;
+        ratio.pos_y = 1.0f / 3.0f;
+        ratio.height = 1.0f / 3.0f;
+        break;
+    }
+    case CamB4C1080P: {
         ratio.pos_x = 0.0f;
         ratio.width = 1.0f;
         ratio.pos_y = 1.0f / 3.0f;
@@ -513,6 +524,21 @@ gl_stitch_info (CamModel model, StitchScopicMode scopic_mode)
         info.fisheye_info[1].intrinsic.fov = 202.8f;
         info.fisheye_info[1].radius = 480.0f;
         info.fisheye_info[1].extrinsic.roll = 89.7f;
+        break;
+    }
+    case CamB4C1080P: {
+        // Fallback values for ISX031 4-cam; overridden by JSON calibration
+        info.merge_width[0] = 0;
+        info.merge_width[1] = 0;
+        info.merge_width[2] = 0;
+        info.merge_width[3] = 0;
+        for (uint32_t i = 0; i < 4; i++) {
+            info.fisheye_info[i].intrinsic.cx  = 960.0f;
+            info.fisheye_info[i].intrinsic.cy  = 768.0f;
+            info.fisheye_info[i].intrinsic.fov = 200.0f;
+            info.fisheye_info[i].radius        = 768.0f;
+            info.fisheye_info[i].extrinsic.roll = i * 90.0f;
+        }
         break;
     }
     case CamC3C8K: {

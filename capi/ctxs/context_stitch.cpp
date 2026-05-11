@@ -168,13 +168,13 @@ StitchContext::set_parameters (ContextParams &param_list)
 
     if (_dewarp_mode == DewarpSphere) {
         _fm_region_ratio = fm_region_ratio (cam_model);
-
-        StitchScopicMode scopic_mode = (StitchScopicMode)_scopic_mode;
-        _stich_info = (_module == StitchSoft) ?
-                      soft_stitch_info (cam_model, scopic_mode) : gl_stitch_info (cam_model, scopic_mode);
     } else {
         _bowl_cfg = bowl_config (cam_model);
     }
+
+    StitchScopicMode scopic_mode = (StitchScopicMode)_scopic_mode;
+    _stich_info = (_module == StitchSoft) ?
+                  soft_stitch_info (cam_model, scopic_mode) : gl_stitch_info (cam_model, scopic_mode);
 
     return XCAM_RETURN_NO_ERROR;
 }

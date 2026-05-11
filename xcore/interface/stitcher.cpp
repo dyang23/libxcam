@@ -23,6 +23,7 @@
 #include "xcam_utils.h"
 #include "calibration_parser.h"
 #include <string>
+#include <cmath>
 
 // angle to position, output range [-180, 180]
 #define OUT_WINDOWS_START 0.0f
@@ -291,34 +292,122 @@ Stitcher::init_camera_info ()
             info.round_angle_start = (i * 360.0f / _camera_num) - info.angle_range / 2.0f;
         }
     } else {
-        const char *env = std::getenv (FISHEYE_CONFIG_ENV_VAR);
-        std::string path (env, (env ? strlen (env) : 0));
-        XCAM_FAIL_RETURN (
-            ERROR, !path.empty (), XCAM_RETURN_ERROR_PARAM,
-            "FISHEYE_CONFIG_PATH is empty, export FISHEYE_CONFIG_PATH first");
-        XCAM_LOG_INFO ("stitcher calibration config path: %s", path.c_str ());
+        // Bowl mode: use calibration from _stitch_info if intrinsic names not set,
+        // otherwise fall back to loading text files.
+        bool have_intr_names = (_intr_names[0] != NULL);
 
-        CalibrationParser parser;
-        char pathname[XCAM_STITCH_NAME_LEN] = {'\0'};
-        for (uint32_t i = 0; i < _camera_num; ++i) {
-            CameraInfo &info = _camera_info[i];
+        if (!have_intr_names) {
+            // Use fisheye_info already set via set_stitch_info() (from JSON calibration)
+            for (uint32_t i = 0; i < _camera_num; ++i) {
+                CameraInfo &info = _camera_info[i];
+                info.calibration.intrinsic = _stitch_info.fisheye_info[i].intrinsic;
+                info.calibration.extrinsic = _stitch_info.fisheye_info[i].extrinsic;
 
-            snprintf (pathname, XCAM_STITCH_NAME_LEN, "%s/%s", path.c_str (), _intr_names[i]);
-            XCamReturn ret = parser.parse_intrinsic_file (pathname, info.calibration.intrinsic);
+                // JSON calibration uses navigational yaw convention (clockwise positive:
+                // 0=front, 90=right, 180=rear, 270=left).
+                // Bowl dewarper's generate_rotation_matrix uses mathematical convention
+                // (counterclockwise positive), so negate yaw to match.
+                info.calibration.extrinsic.yaw = -info.calibration.extrinsic.yaw;
+
+                // JSON translations are in OpenCV convention (X=right, Y=down, Z=forward)
+                // in meters.  Bowl world uses (X=forward, Y=left, Z=up) in mm.
+                // Convert: bowl_X = json_Z, bowl_Y = -json_X, bowl_Z = -json_Y
+                //
+                // Without this mapping, right camera (t=[0.1,0,0]) gets trans_x=100
+                // which means "100mm forward" in bowl, but it should be "100mm right"
+                // i.e. bowl_Y = -100.  Front/rear cameras happen to use t[2] (Z)
+                // which coincides with their forward direction, masking the bug.
+                {
+                    float jx = info.calibration.extrinsic.trans_x;
+                    float jy = info.calibration.extrinsic.trans_y;
+                    float jz = info.calibration.extrinsic.trans_z;
+                    info.calibration.extrinsic.trans_x =  jz * 1000.0f;  // bowl forward = json Z
+                    info.calibration.extrinsic.trans_y = -jx * 1000.0f;  // bowl left    = -json X
+                    info.calibration.extrinsic.trans_z = -jy * 1000.0f;  // bowl up      = -json Y
+                }
+
+                // Cameras at ground level (bowl z ≈ 0) create a degeneracy where
+                // ALL ground points (z=0) project to y=cy in every fisheye image,
+                // collapsing the entire ground section to a single pixel row.
+                // Ensure minimum camera height above ground to break this.
+                {
+                    const float MIN_CAM_HEIGHT_MM = 60.0f;
+                    if (info.calibration.extrinsic.trans_z < MIN_CAM_HEIGHT_MM) {
+                        XCAM_LOG_INFO ("cam[%d] bowl: raising z from %.1f to %.1f mm"
+                                       " (ground degeneracy fix)",
+                                       i, info.calibration.extrinsic.trans_z, MIN_CAM_HEIGHT_MM);
+                        info.calibration.extrinsic.trans_z = MIN_CAM_HEIGHT_MM;
+                    }
+                }
+
+                // PolyBowlFisheyeDewarp uses Scaramuzza OCam model (poly_coeff, c, d, e).
+                // When calibration comes from JSON (OpenCV fisheye model: fx/fy/cx/cy),
+                // these fields are zero.  Derive equidistant fisheye polynomial:
+                //   Scaramuzza elevation angle = atan(z / sqrt(x²+y²))
+                //   equidistant: r = f * (π/2 + angle)
+                //   => poly_coeff[0] = f*π/2,  poly_coeff[1] = +f
+                //
+                // CRITICAL: f must be the equidistant focal length = radius / (fov/2),
+                // NOT the OpenCV pinhole-equivalent fy.
+                // Example: cam with fy=1054, radius=749, fov=200°:
+                //   f_equidist = 749 / (100°*π/180) = 429  (NOT 1054!)
+                //   Using fy=1054 maps to 123% of radius → samples outside fisheye circle → garbage
+                //
+                // Affine: c=1, d=0, e=0 (isotropic equidistant model)
+                IntrinsicParameter &intr = info.calibration.intrinsic;
+                float cam_radius = _stitch_info.fisheye_info[i].radius;
+                if (intr.poly_length == 0 && intr.fov > 0 && cam_radius > 0) {
+                    float fov_half_rad = intr.fov * M_PI / 360.0f;
+                    float f = cam_radius / fov_half_rad;
+                    intr.poly_length = 2;
+                    intr.poly_coeff[0] = f * M_PI / 2.0f;
+                    intr.poly_coeff[1] = f;
+                    intr.c = 1.0f;
+                    intr.d = 0.0f;
+                    intr.e = 0.0f;
+                    XCAM_LOG_INFO ("cam[%d] bowl: equidist f=%.1f (radius=%.0f, fov=%.0f)"
+                                   " => poly[0]=%.1f poly[1]=%.1f",
+                                   i, f, cam_radius, intr.fov, intr.poly_coeff[0], intr.poly_coeff[1]);
+                }
+
+                // Do NOT add XCAM_CAMERA_POSITION_OFFSET_X here.
+                // That offset is only needed for the legacy .txt calibration path
+                // where cameras are in a local coordinate system.  JSON calibration
+                // already provides world-frame translations; centralize_bowl_coord
+                // will center them automatically.
+                info.angle_range = _viewpoints_range[i];
+                info.round_angle_start = (i * 360.0f / _camera_num) - info.angle_range / 2.0f;
+            }
+        } else {
+            const char *env = std::getenv (FISHEYE_CONFIG_ENV_VAR);
+            std::string path (env, (env ? strlen (env) : 0));
             XCAM_FAIL_RETURN (
-                ERROR, ret == XCAM_RETURN_NO_ERROR, XCAM_RETURN_ERROR_PARAM,
-                "stitcher parse intrinsic params(%s) failed", pathname);
+                ERROR, !path.empty (), XCAM_RETURN_ERROR_PARAM,
+                "FISHEYE_CONFIG_PATH is empty, export FISHEYE_CONFIG_PATH first");
+            XCAM_LOG_INFO ("stitcher calibration config path: %s", path.c_str ());
 
-            snprintf (pathname, XCAM_STITCH_NAME_LEN, "%s/%s", path.c_str (), _extr_names[i]);
-            ret = parser.parse_extrinsic_file (pathname, info.calibration.extrinsic);
-            XCAM_FAIL_RETURN (
-                ERROR, ret == XCAM_RETURN_NO_ERROR, XCAM_RETURN_ERROR_PARAM,
-                "stitcher parse extrinsic params(%s) failed", pathname);
+            CalibrationParser parser;
+            char pathname[XCAM_STITCH_NAME_LEN] = {'\0'};
+            for (uint32_t i = 0; i < _camera_num; ++i) {
+                CameraInfo &info = _camera_info[i];
 
-            info.calibration.extrinsic.trans_x += XCAM_CAMERA_POSITION_OFFSET_X;
+                snprintf (pathname, XCAM_STITCH_NAME_LEN, "%s/%s", path.c_str (), _intr_names[i]);
+                XCamReturn ret = parser.parse_intrinsic_file (pathname, info.calibration.intrinsic);
+                XCAM_FAIL_RETURN (
+                    ERROR, ret == XCAM_RETURN_NO_ERROR, XCAM_RETURN_ERROR_PARAM,
+                    "stitcher parse intrinsic params(%s) failed", pathname);
 
-            info.angle_range = _viewpoints_range[i];
-            info.round_angle_start = (i * 360.0f / _camera_num) - info.angle_range / 2.0f;
+                snprintf (pathname, XCAM_STITCH_NAME_LEN, "%s/%s", path.c_str (), _extr_names[i]);
+                ret = parser.parse_extrinsic_file (pathname, info.calibration.extrinsic);
+                XCAM_FAIL_RETURN (
+                    ERROR, ret == XCAM_RETURN_NO_ERROR, XCAM_RETURN_ERROR_PARAM,
+                    "stitcher parse extrinsic params(%s) failed", pathname);
+
+                info.calibration.extrinsic.trans_x += XCAM_CAMERA_POSITION_OFFSET_X;
+
+                info.angle_range = _viewpoints_range[i];
+                info.round_angle_start = (i * 360.0f / _camera_num) - info.angle_range / 2.0f;
+            }
         }
 
         centralize_bowl_coord_from_cameras (
