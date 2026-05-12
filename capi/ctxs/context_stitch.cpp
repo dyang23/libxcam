@@ -379,6 +379,8 @@ StitchContext::init_config ()
 
     _stitcher->set_stitch_info (_stich_info);
     if (_dewarp_mode == DewarpBowl) {
+        _stitcher->set_intrinsic_names (intrinsic_names);
+        _stitcher->set_extrinsic_names (extrinsic_names);
         _stitcher->set_bowl_config (_bowl_cfg);
     }
 
