@@ -75,9 +75,10 @@ bowl_config (CamModel model)
         bowl.angle_end = 360.0f;
         bowl.center_z = 160.0f;
         bowl.wall_height = 200.0f;
-        // ground_length must be < a_ground - max_cam_dist (444.7 - 100 = 344.7)
-        // so the inner bowl edge never goes behind cameras
-        bowl.ground_length = 300.0f;
+        // ground_length: how far from bowl equator inward the ground extends.
+        // a_ground=444.7mm, so 430 leaves a ~15mm hole (3% of image).
+        // Fisheye circle clamp handles any points behind cameras.
+        bowl.ground_length = 430.0f;
         break;
     }
     default:

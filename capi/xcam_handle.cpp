@@ -251,7 +251,7 @@ xcam_handle_execute (
     SmartPtr<VideoBuffer> input, output, pre, cur;
     for (int i = 0; buf_in[i] != NULL; i++) {
         cur = append_buf ?
-            append_extbuf_to_xcambuf (buf_in[i]) : copy_extbuf_to_xcambuf (handle, buf_in[i]);
+              append_extbuf_to_xcambuf (buf_in[i]) : copy_extbuf_to_xcambuf (handle, buf_in[i]);
         XCAM_FAIL_RETURN (
             ERROR, cur.ptr (), XCAM_RETURN_ERROR_MEM,
             "xcam_handle(%s) execute failed, convert input buffer failed", context->get_type_name ());
@@ -329,16 +329,40 @@ xcam_create_topview_remapper (
         float cx = out_w / 2.0f;
         float cy = out_h / 2.0f;
         points.resize (out_w * out_h);
-        XCAM_LOG_INFO ("Topview mm/px=%.2f  coverage=%.0fmm x %.0fmm",
-                       mm_per_px, mm_per_px * out_w, mm_per_px * out_h);
+
+        // Compute the inner hole radius of the bowl ground annulus.
+        // Points inside this radius have no bowl surface → mark as invalid.
+        float a_ground = cfg.a * sqrt (1.0f - cfg.center_z * cfg.center_z / (cfg.c * cfg.c));
+        float b_ground = cfg.b * sqrt (1.0f - cfg.center_z * cfg.center_z / (cfg.c * cfg.c));
+        float a_inner = a_ground - cfg.ground_length;
+        float b_inner = b_ground - cfg.ground_length;
+        if (a_inner < 0) a_inner = 0;
+        if (b_inner < 0) b_inner = 0;
+        float inner_r_sq_a = a_inner * a_inner;
+        float inner_r_sq_b = b_inner * b_inner;
+
+        XCAM_LOG_INFO ("Topview mm/px=%.2f  coverage=%.0fmm x %.0fmm  inner_hole=%.0fmm x %.0fmm",
+                       mm_per_px, mm_per_px * out_w, mm_per_px * out_h,
+                       2 * a_inner, 2 * b_inner);
         for (uint32_t row = 0; row < out_h; row++) {
             for (uint32_t col = 0; col < out_w; col++) {
-                PointFloat3 world_pos (
-                    (cy - row) * mm_per_px,   // X: front-rear (row=0 → front)
-                    (cx - col) * mm_per_px,   // Y: left-right (col=0 → left)
-                    0.0f);
-                points[out_w * row + col] =
-                    bowl_view_coords_to_image (cfg, world_pos, bowl_w, bowl_h);
+                float wx = (cy - row) * mm_per_px;   // X: front-rear (row=0 → front)
+                float wy = (cx - col) * mm_per_px;   // Y: left-right (col=0 → left)
+
+                // Check if inside the bowl ground inner hole (ellipse test)
+                bool inside_hole = (inner_r_sq_a > 0 && inner_r_sq_b > 0) &&
+                                   (wx * wx / inner_r_sq_a + wy * wy / inner_r_sq_b < 1.0f);
+
+                if (inside_hole) {
+                    PointFloat2 invalid_pt;
+                    invalid_pt.x = -1.0f;
+                    invalid_pt.y = -1.0f;
+                    points[out_w * row + col] = invalid_pt;
+                } else {
+                    PointFloat3 world_pos (wx, wy, 0.0f);
+                    points[out_w * row + col] =
+                        bowl_view_coords_to_image (cfg, world_pos, bowl_w, bowl_h);
+                }
             }
         }
     }
