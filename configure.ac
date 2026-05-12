@@ -73,6 +73,7 @@ XCAM_ARG_ENABLE(docs, --enable-docs, enable_docs, no, build Doxygen documentatio
 XCAM_ARG_ENABLE(3alib, --enable-3alib, enable_3alib, no, enable 3A library)
 XCAM_ARG_ENABLE(smartlib, --enable-smartlib, enable_smartlib, no, enable smart analysis library)
 XCAM_ARG_ENABLE(json, --enable-json, enable_json, no, enable camera calibration json parser)
+XCAM_ARG_ENABLE(dump-dewarp, --enable-dump-dewarp, enable_dump_dewarp, no, enable dewarp intermediate buffer dump for debug)
 
 XCAM_CHECK_MODULE($enable_drm, libdrm, LIBDRM, HAVE_LIBDRM=1, HAVE_LIBDRM=0)
 XCAM_CHECK_MODULE($enable_libcl, OpenCL, LIBCL, HAVE_LIBCL=1, HAVE_LIBCL=0)
@@ -96,6 +97,7 @@ XCAM_CHECK_JSON($enable_json, HAVE_JSON=1, HAVE_JSON=0)
 
 XCAM_IF($enable_capi, yes, ENABLE_CAPI=1, ENABLE_CAPI=0)
 XCAM_IF($enable_profiling, yes, ENABLE_PROFILING=1, ENABLE_PROFILING=0)
+XCAM_IF($enable_dump_dewarp, yes, ENABLE_DUMP_DEWARP=1, ENABLE_DUMP_DEWARP=0)
 XCAM_IF($enable_3alib, yes, ENABLE_3ALIB=1, ENABLE_3ALIB=0)
 XCAM_IF($enable_smartlib, yes, ENABLE_SMART_LIB=1, ENABLE_SMART_LIB=0)
 
@@ -128,6 +130,7 @@ XCAM_DEFINE_MACOR(ENABLE_DVS_CL_PATH, $ENABLE_DVS_CL_PATH, enable dvs cl path)
 XCAM_DEFINE_MACOR(ENABLE_CAPI, $ENABLE_CAPI, enable capi)
 XCAM_DEFINE_MACOR(HAVE_IA_AIQ, $ENABLE_IA_AIQ, have aiq binary)
 XCAM_DEFINE_MACOR(HAVE_JSON, $HAVE_JSON, have json)
+XCAM_DEFINE_MACOR(ENABLE_DUMP_DEWARP, $ENABLE_DUMP_DEWARP, enable dewarp dump debug)
 
 XCAM_CONDITIONAL(DEBUG, $enable_debug, yes)
 XCAM_CONDITIONAL(ENABLE_DOCS, $enable_docs, yes)
@@ -211,4 +214,5 @@ echo "
      enable dvs                 : $enable_dvs
      enable libxcam-capi lib    : $enable_capi
      enable json parser         : $have_json
+     enable dump dewarp        : $enable_dump_dewarp
 "

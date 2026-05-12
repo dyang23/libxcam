@@ -29,6 +29,12 @@
 #include "xcam_utils.h"
 #include <map>
 
+#if ENABLE_DUMP_DEWARP
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <cstdlib>
+#endif
+
 #define ENABLE_FEATURE_MATCH HAVE_OPENCV
 
 #if ENABLE_FEATURE_MATCH
@@ -78,6 +84,84 @@ static void
 stitcher_dump_fisheye_lut (FisheyeDewarp::MapTable &lut, ...) {
     XCAM_UNUSED (lut);
 }
+#endif
+
+#if ENABLE_DUMP_DEWARP
+#define XCAM_DUMP_DEWARP_DEFAULT_DIR "/tmp/xcam_dewarp_dump"
+#define XCAM_DUMP_DEWARP_ENV_DIR     "XCAM_DUMP_DEWARP_DIR"
+#define XCAM_DUMP_DEWARP_ENV_ENABLED "XCAM_DUMP_DEWARP"
+
+class DewarpDumpDebug {
+public:
+    static DewarpDumpDebug &instance () {
+        static DewarpDumpDebug inst;
+        return inst;
+    }
+
+    bool is_enabled () const {
+        return _enabled;
+    }
+    const char *dump_dir () const {
+        return _dump_dir;
+    }
+    uint32_t next_frame_id () {
+        return _frame_count++;
+    }
+
+    void dump_dewarp_buffer (
+        const SmartPtr<VideoBuffer> &buf, uint32_t cam_idx, uint32_t frame_id)
+    {
+        if (!_enabled)
+            return;
+
+        const VideoBufferInfo &info = buf->get_video_info ();
+        char file_name[512];
+        snprintf (file_name, sizeof (file_name),
+                  "%s/dewarp_cam%d_%05d_%dx%d.%s",
+                  _dump_dir, cam_idx, frame_id, info.width, info.height,
+                  xcam_fourcc_to_string (info.format));
+
+        if (dump_video_buf (buf, file_name)) {
+            XCAM_LOG_INFO ("dump-dewarp: saved cam%d frame%d -> %s", cam_idx, frame_id, file_name);
+        } else {
+            XCAM_LOG_WARNING ("dump-dewarp: failed to save cam%d frame%d -> %s", cam_idx, frame_id, file_name);
+        }
+    }
+
+private:
+    DewarpDumpDebug () : _enabled (false), _frame_count (0) {
+        // runtime kill-switch: set XCAM_DUMP_DEWARP=0 to disable even if compiled in
+        const char *env_enabled = std::getenv (XCAM_DUMP_DEWARP_ENV_ENABLED);
+        if (env_enabled && std::string (env_enabled) == "0") {
+            _enabled = false;
+            return;
+        }
+
+        const char *env_dir = std::getenv (XCAM_DUMP_DEWARP_ENV_DIR);
+        if (env_dir && env_dir[0] != '\0') {
+            snprintf (_dump_dir, sizeof (_dump_dir), "%s", env_dir);
+        } else {
+            snprintf (_dump_dir, sizeof (_dump_dir), "%s", XCAM_DUMP_DEWARP_DEFAULT_DIR);
+        }
+
+        // create output directory
+        struct stat st;
+        if (stat (_dump_dir, &st) != 0) {
+            if (mkdir (_dump_dir, 0755) != 0) {
+                XCAM_LOG_ERROR ("dump-dewarp: failed to create directory %s", _dump_dir);
+                _enabled = false;
+                return;
+            }
+        }
+
+        _enabled = true;
+        XCAM_LOG_INFO ("dump-dewarp: enabled, output dir = %s", _dump_dir);
+    }
+
+    bool     _enabled;
+    uint32_t _frame_count;
+    char     _dump_dir[512];
+};
 #endif
 
 namespace SoftStitcherPriv {
@@ -1047,6 +1131,17 @@ SoftStitcher::geomap_done (
 
     XCAM_LOG_DEBUG ("soft-stitcher:%s camera(idx:%d) geomap done", XCAM_STR (get_name ()), geomap_param->idx);
     stitcher_dump_buf (geomap_param->out_buf, geomap_param->idx, "stitcher-geomap");
+
+#if ENABLE_DUMP_DEWARP
+    {
+        DewarpDumpDebug &dbg = DewarpDumpDebug::instance ();
+        if (dbg.is_enabled ()) {
+            // use cam_idx as part of frame_id tracking: frame_id advances per full round
+            uint32_t frame_id = dbg.next_frame_id ();
+            dbg.dump_dewarp_buffer (geomap_param->out_buf, geomap_param->idx, frame_id);
+        }
+    }
+#endif
 
     //start both blender and feature match
     XCamReturn ret = _impl->start_overlap_tasks (param, geomap_param->idx, geomap_param->out_buf);
