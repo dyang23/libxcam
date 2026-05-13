@@ -334,10 +334,11 @@ xcam_create_topview_remapper (
         // Points inside this radius have no bowl surface → mark as invalid.
         float a_ground = cfg.a * sqrt (1.0f - cfg.center_z * cfg.center_z / (cfg.c * cfg.c));
         float b_ground = cfg.b * sqrt (1.0f - cfg.center_z * cfg.center_z / (cfg.c * cfg.c));
-        float a_inner = a_ground - cfg.ground_length;
+        // ground_length is measured along the b-axis; the ground shrinks
+        // concentrically keeping the a/b ratio, so derive a_inner from b_inner.
         float b_inner = b_ground - cfg.ground_length;
-        if (a_inner < 0) a_inner = 0;
         if (b_inner < 0) b_inner = 0;
+        float a_inner = (b_ground > 0) ? b_inner * (a_ground / b_ground) : 0;
         float inner_r_sq_a = a_inner * a_inner;
         float inner_r_sq_b = b_inner * b_inner;
 

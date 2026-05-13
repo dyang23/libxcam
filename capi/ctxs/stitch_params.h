@@ -64,21 +64,15 @@ bowl_config (CamModel model)
 
     switch (model) {
     case CamB4C1080P: {
-        // Robot-scale bowl: cameras ~100mm from center
-        // a,b = half-axes of the ellipsoid ground footprint (mm)
-        // c   = half-axis vertical
-        // Keep bowl small so camera offsets (100mm) are significant (~20% of radius)
-        bowl.a = 500.0f;
-        bowl.b = 500.0f;
-        bowl.c = 350.0f;
+        // WoodScape car-scale bowl (circular)
+        bowl.a = 6000.0f;
+        bowl.b = 6000.0f;
+        bowl.c = 2700.0f;
         bowl.angle_start = 0.0f;
         bowl.angle_end = 360.0f;
-        bowl.center_z = 160.0f;
-        bowl.wall_height = 200.0f;
-        // ground_length: how far from bowl equator inward the ground extends.
-        // a_ground=444.7mm, so 430 leaves a ~15mm hole (3% of image).
-        // Fisheye circle clamp handles any points behind cameras.
-        bowl.ground_length = 430.0f;
+        bowl.center_z = 880.0f;
+        bowl.wall_height = 1800.0f;
+        bowl.ground_length = 4800.0f;
         break;
     }
     default:
