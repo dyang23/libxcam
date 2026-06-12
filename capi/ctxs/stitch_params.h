@@ -64,15 +64,15 @@ bowl_config (CamModel model)
 
     switch (model) {
     case CamB4C1080P: {
-        // WoodScape car-scale bowl (circular)
-        bowl.a = 6000.0f;
-        bowl.b = 6000.0f;
-        bowl.c = 2700.0f;
+        // SVS sample / EU5 car bowl config
+        bowl.a = 5000.0f;
+        bowl.b = 5000.0f;
+        bowl.c = 2250.0f;
         bowl.angle_start = 0.0f;
         bowl.angle_end = 360.0f;
-        bowl.center_z = 880.0f;
-        bowl.wall_height = 1800.0f;
-        bowl.ground_length = 4800.0f;
+        bowl.center_z = 700.0f;
+        bowl.wall_height = 1500.0f;
+        bowl.ground_length = 4000.0f;
         break;
     }
     default:
@@ -93,10 +93,10 @@ viewpoints_range (CamModel model, float *range)
         break;
     }
     case CamB4C1080P: {
-        range[0] = 144.0f;
-        range[1] = 144.0f;
-        range[2] = 144.0f;
-        range[3] = 144.0f;
+        range[0] = 100.0f;
+        range[1] = 100.0f;
+        range[2] = 100.0f;
+        range[3] = 100.0f;
         break;
     }
     case CamC3C8K: {
@@ -308,37 +308,38 @@ soft_stitch_info (CamModel model, StitchScopicMode scopic_mode)
         break;
     }
     case CamB4C1080P: {
-        // isx031INTC031L 1920x1536 fisheye, 4 cameras at 90-degree intervals
-        // sphere equirectangular mode: cameras face front/right/rear/left outward
-        // cx=960 cy=768 = image center; radius=768 = half of 1536 height; fov=185 degrees
-        // merge_width=0: let stitcher use the full computed overlap region
+        // SVS sample: EU5 car, 4x Sekonix CSI fisheye, 960x640, FOV~115°
         info.merge_width[0] = 0;
         info.merge_width[1] = 0;
         info.merge_width[2] = 0;
         info.merge_width[3] = 0;
 
-        info.fisheye_info[0].intrinsic.cx     = 960.0f;
-        info.fisheye_info[0].intrinsic.cy     = 768.0f;
-        info.fisheye_info[0].intrinsic.fov    = 185.0f;
-        info.fisheye_info[0].radius           = 768.0f;
+        // front camera: fx=302.5 fy=320.7 cx=496.6 cy=331.2
+        info.fisheye_info[0].intrinsic.cx     = 496.6f;
+        info.fisheye_info[0].intrinsic.cy     = 331.2f;
+        info.fisheye_info[0].intrinsic.fov    = 115.0f;
+        info.fisheye_info[0].radius           = 310.0f;
         info.fisheye_info[0].extrinsic.roll   = 0.0f;    // front
 
-        info.fisheye_info[1].intrinsic.cx     = 960.0f;
-        info.fisheye_info[1].intrinsic.cy     = 768.0f;
-        info.fisheye_info[1].intrinsic.fov    = 185.0f;
-        info.fisheye_info[1].radius           = 768.0f;
+        // right camera: fx=302.9 fy=322.5 cx=458.0 cy=310.0
+        info.fisheye_info[1].intrinsic.cx     = 458.0f;
+        info.fisheye_info[1].intrinsic.cy     = 310.0f;
+        info.fisheye_info[1].intrinsic.fov    = 115.0f;
+        info.fisheye_info[1].radius           = 310.0f;
         info.fisheye_info[1].extrinsic.roll   = 90.0f;   // right
 
-        info.fisheye_info[2].intrinsic.cx     = 960.0f;
-        info.fisheye_info[2].intrinsic.cy     = 768.0f;
-        info.fisheye_info[2].intrinsic.fov    = 185.0f;
-        info.fisheye_info[2].radius           = 768.0f;
+        // rear camera: fx=304.3 fy=324.8 cx=481.3 cy=316.5
+        info.fisheye_info[2].intrinsic.cx     = 481.3f;
+        info.fisheye_info[2].intrinsic.cy     = 316.5f;
+        info.fisheye_info[2].intrinsic.fov    = 115.0f;
+        info.fisheye_info[2].radius           = 310.0f;
         info.fisheye_info[2].extrinsic.roll   = 180.0f;  // rear
 
-        info.fisheye_info[3].intrinsic.cx     = 960.0f;
-        info.fisheye_info[3].intrinsic.cy     = 768.0f;
-        info.fisheye_info[3].intrinsic.fov    = 185.0f;
-        info.fisheye_info[3].radius           = 768.0f;
+        // left camera: fx=303.3 fy=322.3 cx=486.5 cy=323.9
+        info.fisheye_info[3].intrinsic.cx     = 486.5f;
+        info.fisheye_info[3].intrinsic.cy     = 323.9f;
+        info.fisheye_info[3].intrinsic.fov    = 115.0f;
+        info.fisheye_info[3].radius           = 310.0f;
         info.fisheye_info[3].extrinsic.roll   = 270.0f;  // left
         break;
     }

@@ -340,9 +340,18 @@ Stitcher::init_camera_info ()
                     }
                 }
 
+                // Copy OpenCV fisheye distortion coefficients D[k1,k2,k3,k4]
+                // from FisheyeInfo into IntrinsicParameter so PolyBowlFisheyeDewarp
+                // can apply the full OpenCV fisheye projection model.
+                IntrinsicParameter &intr = info.calibration.intrinsic;
+                for (uint32_t d = 0; d < 4; d++) {
+                    intr.fisheye_distort_coeff[d] = _stitch_info.fisheye_info[i].distort_coeff[d];
+                }
+
                 // PolyBowlFisheyeDewarp uses Scaramuzza OCam model (poly_coeff, c, d, e).
                 // When calibration comes from JSON (OpenCV fisheye model: fx/fy/cx/cy),
-                // these fields are zero.  Derive equidistant fisheye polynomial:
+                // these fields are zero.  Derive equidistant fisheye polynomial
+                // as a fallback (used when D[] is all zeros):
                 //   Scaramuzza elevation angle = atan(z / sqrt(x²+y²))
                 //   equidistant: r = f * (π/2 + angle)
                 //   => poly_coeff[0] = f*π/2,  poly_coeff[1] = +f
@@ -353,8 +362,11 @@ Stitcher::init_camera_info ()
                 //   f_equidist = 749 / (100°*π/180) = 429  (NOT 1054!)
                 //   Using fy=1054 maps to 123% of radius → samples outside fisheye circle → garbage
                 //
+                // When D[] is non-zero, PolyBowlFisheyeDewarp::cal_img_coord() will use
+                // the full OpenCV fisheye model: theta_d = theta*(1+k1*t²+k2*t⁴+k3*t⁶+k4*t⁸)
+                // with fx/fy/cx/cy directly, bypassing the Scaramuzza polynomial entirely.
+                //
                 // Affine: c=1, d=0, e=0 (isotropic equidistant model)
-                IntrinsicParameter &intr = info.calibration.intrinsic;
                 float cam_radius = _stitch_info.fisheye_info[i].radius;
                 if (intr.poly_length == 0 && intr.fov > 0 && cam_radius > 0) {
                     float fov_half_rad = intr.fov * M_PI / 360.0f;

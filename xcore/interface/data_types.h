@@ -100,6 +100,10 @@ struct IntrinsicParameter {
 
     float poly_coeff[XCAM_INTRINSIC_MAX_POLY_SIZE];
 
+    // OpenCV fisheye distortion coefficients [k1, k2, k3, k4]
+    // theta_d = theta * (1 + k1*theta^2 + k2*theta^4 + k3*theta^6 + k4*theta^8)
+    float fisheye_distort_coeff[4];
+
     bool  flip;
 
     IntrinsicParameter ()
@@ -108,6 +112,7 @@ struct IntrinsicParameter {
           c (0.0f), d (0.0f), e (0.0f), poly_length (0), flip (false)
     {
         xcam_mem_clear (poly_coeff);
+        xcam_mem_clear (fisheye_distort_coeff);
     }
 };
 

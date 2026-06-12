@@ -359,7 +359,8 @@ StitchContext::init_config ()
 #endif
     }
 
-    get_fisheye_info ((CamModel)_cam_model, (StitchScopicMode)_scopic_mode, _stich_info.fisheye_info);
+    XCamReturn json_ret = get_fisheye_info ((CamModel)_cam_model, (StitchScopicMode)_scopic_mode, _stich_info.fisheye_info);
+    bool json_calib_loaded = (json_ret == XCAM_RETURN_NO_ERROR);
 
     for (uint32_t cam_id = 0; cam_id < XCAM_STITCH_FISHEYE_MAX_NUM; cam_id++) {
         XCAM_LOG_DEBUG ("cam[%d]: flip=%d ", cam_id, _stich_info.fisheye_info[cam_id].intrinsic.flip);
@@ -379,8 +380,14 @@ StitchContext::init_config ()
 
     _stitcher->set_stitch_info (_stich_info);
     if (_dewarp_mode == DewarpBowl) {
-        _stitcher->set_intrinsic_names (intrinsic_names);
-        _stitcher->set_extrinsic_names (extrinsic_names);
+        // When JSON calibration is loaded successfully, use the JSON path
+        // (with OpenCV fisheye D[] distortion model) instead of .txt files.
+        // The stitcher's init_camera_info() uses the JSON path when
+        // intrinsic_names are NOT set.
+        if (!json_calib_loaded) {
+            _stitcher->set_intrinsic_names (intrinsic_names);
+            _stitcher->set_extrinsic_names (extrinsic_names);
+        }
         _stitcher->set_bowl_config (_bowl_cfg);
     }
 

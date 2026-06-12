@@ -298,15 +298,78 @@ BowlFisheyeDewarp::cal_img_coord (const PointFloat3 &cam_coord, PointFloat2 &img
 void
 PolyBowlFisheyeDewarp::cal_img_coord (const PointFloat3 &cam_coord, PointFloat2 &img_coord)
 {
-    float dist2center = sqrt (cam_coord.x * cam_coord.x + cam_coord.y * cam_coord.y);
-    float angle = atan (cam_coord.z / dist2center);
-
-    float p = 1;
-    float poly_sum = 0;
-
     const IntrinsicParameter intr = get_intr_param ();
 
-    if (dist2center != 0) {
+    float dist2center = sqrt (cam_coord.x * cam_coord.x + cam_coord.y * cam_coord.y);
+
+    if (dist2center < 1e-6f) {
+        img_coord.x = intr.cx;
+        img_coord.y = intr.cy;
+        return;
+    }
+
+    // Check if OpenCV fisheye distortion coefficients are available.
+    // When D[] has any non-zero value, use the full OpenCV fisheye model;
+    // otherwise fall back to Scaramuzza polynomial.
+    bool has_opencv_distort = false;
+    for (uint32_t i = 0; i < 4; i++) {
+        if (fabs (intr.fisheye_distort_coeff[i]) > 1e-10f) {
+            has_opencv_distort = true;
+            break;
+        }
+    }
+
+    if (has_opencv_distort && intr.fx > 0 && intr.fy > 0) {
+        // ---- OpenCV fisheye projection model ----
+        // cam_coord: (x, y, z) in camera frame, z = optical axis
+        //
+        // theta = angle between 3D ray and optical axis
+        // theta_d = theta * (1 + k1*theta^2 + k2*theta^4 + k3*theta^6 + k4*theta^8)
+        // u = fx * theta_d * (x / r) + cx
+        // v = fy * theta_d * (y / r) + cy
+        //
+        // In libxcam's bowl coordinate system, world_coord2cam() maps
+        // cam_coord.z = -cam_world_coord.x, so the optical axis points
+        // in the -z direction.  OpenCV fisheye expects z forward, so we
+        // negate z to get the correct theta (angle from optical axis).
+        float z_forward = -cam_coord.z;
+
+        // Points behind the camera (z_forward < 0) are outside the FOV.
+        if (z_forward < 0) {
+            img_coord.x = -1.0f;
+            img_coord.y = -1.0f;
+            return;
+        }
+
+        float theta = atan2 (dist2center, z_forward);  // angle from optical axis [0, pi/2]
+        float theta2 = theta * theta;
+
+        float k1 = intr.fisheye_distort_coeff[0];
+        float k2 = intr.fisheye_distort_coeff[1];
+        float k3 = intr.fisheye_distort_coeff[2];
+        float k4 = intr.fisheye_distort_coeff[3];
+
+        float theta_d = theta * (1.0f
+                                 + k1 * theta2
+                                 + k2 * theta2 * theta2
+                                 + k3 * theta2 * theta2 * theta2
+                                 + k4 * theta2 * theta2 * theta2 * theta2);
+
+        float scale = theta_d / dist2center;
+        img_coord.x = intr.fx * cam_coord.x * scale + intr.cx;
+        img_coord.y = intr.fy * cam_coord.y * scale + intr.cy;
+    } else {
+        // ---- Scaramuzza OCam polynomial model (legacy) ----
+        // elevation angle = atan(z / r_xy)
+        // r_image = sum( poly_coeff[i] * angle^i )
+        // (x_img, y_img) = (x/r_xy, y/r_xy) * r_image
+        // u = x_img * c + y_img * d + cx
+        // v = x_img * e + y_img     + cy
+
+        float angle = atan (cam_coord.z / dist2center);
+
+        float p = 1.0f;
+        float poly_sum = 0.0f;
         for (uint32_t i = 0; i < intr.poly_length; i++) {
             poly_sum += intr.poly_coeff[i] * p;
             p = p * angle;
@@ -317,10 +380,7 @@ PolyBowlFisheyeDewarp::cal_img_coord (const PointFloat3 &cam_coord, PointFloat2 
 
         img_coord.x = img_x * intr.c + img_y * intr.d + intr.cx;
         img_coord.y = img_x * intr.e + img_y + intr.cy;
-    } else {
-        img_coord.x = intr.cx;
-        img_coord.y = intr.cy;
     }
-} // Adopt Scaramuzza's approach to calculate image coordinates from camera coordinates
+}
 
 }
